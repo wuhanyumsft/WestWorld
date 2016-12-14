@@ -1,7 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
@@ -12,12 +13,15 @@ namespace WestWorld
 {
     public class Program
     {
-        private static IDocumentClient client;
+        private static IDocumentClient _client;
+        private const int HostNumber = 100000;
+        private const int ConcurrentCount = 100;
+
         public static void Main(string[] args)
         {
             const string endPoint = "https://westworld.documents.azure.com:443/";
             const string key = "1YTKAuKuZOx4I8tkdJGmLNBRnr3kBu3PYQuqQw24HsZnu5rbUnJL33LKW39NNAMGOCLwWrVtR9tVCb44w4slDw==";
-            client = new DocumentClient(new Uri(endPoint), key);
+            _client = new DocumentClient(new Uri(endPoint), key);
 
             const string databaseName = "WestWorld";
             string collectionName = "HostList";
@@ -27,16 +31,92 @@ namespace WestWorld
             }
             CreateDatabaseIfNotExists(databaseName).Wait();
             CreateDocumentCollectionIfNotExists(databaseName, collectionName).Wait();
-            const int concurrentCount = 100;
-            Task[] tasks = new Task[concurrentCount];
+            
+
+            string operationName = null;
+            if (args.Length > 1)
+            {
+                operationName = args[1];
+            }
+
+            if (string.IsNullOrEmpty(operationName) ||
+                string.Equals("Create", operationName, StringComparison.CurrentCultureIgnoreCase))
+            {
+                CreateHostList(databaseName, collectionName);
+            }
+            else if (string.Equals("Ping", operationName, StringComparison.CurrentCultureIgnoreCase))
+            {
+                GetRandomHostFromHostList(databaseName, collectionName);
+            }
+            else if (string.Equals("Pressure", operationName, StringComparison.CurrentCultureIgnoreCase))
+            {
+                PressureTest(databaseName, collectionName);
+            }
+        }
+
+        private static void PressureTest(string databaseName, string collectionName)
+        {
+            const int concurrentNumStart = 10;
+            const int concurrentNumEnd = 100;
+            const int concurrentStep = 10;
+            const int stepDurationMinute = 5;
+
+            for (int i = concurrentNumStart; i <= concurrentNumEnd; i += concurrentStep)
+            {
+                var autoEvent = new AutoResetEvent(false);
+                var concurrentNum = i;
+                using (new Timer(state =>
+                {
+                    Console.WriteLine($"Hello {concurrentNum} {System.DateTime.Now}");
+                }, autoEvent, 0, Timeout.Infinite))
+                {
+                    autoEvent.WaitOne(stepDurationMinute * 60 * 1000);
+                }
+            }
+
+            Console.ReadKey();
+        }
+
+        private static void GetRandomHostFromHostList(string databaseName, string collectionName)
+        {
+            Random seed = new Random();
+            long index = 0;
+
+            while (true)
+            {
+                int hostId;
+                long timeElpased;
+                hostId = seed.Next(0, HostNumber);
+                Console.Write($"{index}");
+                timeElpased = GetTimeElapsedOfGetHost(databaseName, collectionName, hostId.ToString()).Result;
+                Console.Write($", {DateTime.Now:h:mm:ss tt}");
+                Console.WriteLine($", {timeElpased}");
+                index++;
+                System.Threading.Thread.Sleep(1000);
+            }
+        }
+
+        private async static Task<long> GetTimeElapsedOfGetHost(string databaseName, string collectionName, string hostId)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+            Document doc = await _client.ReadDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, hostId));
+            Console.Write($", {hostId}, {doc.GetPropertyValue<string>("Name")}");
+            sw.Stop();
+            return sw.ElapsedMilliseconds;
+        }
+
+        private static void CreateHostList(string databaseName, string collectionName)
+        {
+            Task[] tasks = new Task[ConcurrentCount];
             var personGenerator = new PersonNameGenerator();
-            for (int i = 99990; i < 100000; i++)
+            for (int i = 0; i < HostNumber; i++)
             {
                 if (tasks.All(t => t != null && !t.IsCompleted && !t.IsFaulted))
                 {
                     Task.WhenAny(tasks).Wait();
                 }
-                for (int j = 0; j < concurrentCount; j++)
+                for (int j = 0; j < ConcurrentCount; j++)
                 {
                     if (tasks[j] == null || tasks[j].IsCompleted || tasks[j].IsFaulted)
                     {
@@ -50,13 +130,13 @@ namespace WestWorld
                 }
             }
             Task.WhenAll(tasks.Where(t => t != null)).Wait();
-        } 
+        }
 
         private static void WriteToConsoleAndPromptToContinue(string format, params object[] args)
         {
             Console.WriteLine(format, args);
-            Console.WriteLine("Press any key to continue ...");
-            Console.ReadKey();
+            //Console.WriteLine("Press any key to continue ...");
+            //Console.ReadKey();
         }
 
         private static async Task CreateDatabaseIfNotExists(string databaseName)
@@ -64,7 +144,7 @@ namespace WestWorld
             // Check to verify a database with the id=FamilyDB does not exist
             try
             {
-                await client.ReadDatabaseAsync(UriFactory.CreateDatabaseUri(databaseName));
+                await _client.ReadDatabaseAsync(UriFactory.CreateDatabaseUri(databaseName));
                 WriteToConsoleAndPromptToContinue("Found {0}", databaseName);
             }
             catch (DocumentClientException de)
@@ -72,7 +152,7 @@ namespace WestWorld
                 // If the database does not exist, create a new database
                 if (de.StatusCode == HttpStatusCode.NotFound)
                 {
-                    await client.CreateDatabaseAsync(new Database { Id = databaseName });
+                    await _client.CreateDatabaseAsync(new Database { Id = databaseName });
                     WriteToConsoleAndPromptToContinue("Created {0}", databaseName);
                 }
                 else
@@ -86,7 +166,7 @@ namespace WestWorld
         {
             try
             {
-                await client.ReadDocumentCollectionAsync(UriFactory.CreateDocumentCollectionUri(databaseName, collectionName));
+                await _client.ReadDocumentCollectionAsync(UriFactory.CreateDocumentCollectionUri(databaseName, collectionName));
                 WriteToConsoleAndPromptToContinue("Found {0}", collectionName);
             }
             catch (DocumentClientException de)
@@ -101,7 +181,7 @@ namespace WestWorld
                     collectionInfo.IndexingPolicy = new IndexingPolicy(new RangeIndex(DataType.String) { Precision = -1 });
 
                     // Here we create a collection with 400 RU/s.
-                    await client.CreateDocumentCollectionAsync(
+                    await _client.CreateDocumentCollectionAsync(
                         UriFactory.CreateDatabaseUri(databaseName),
                         collectionInfo,
                         new RequestOptions { OfferThroughput = 400 });
@@ -126,7 +206,7 @@ namespace WestWorld
                     {
                         Console.WriteLine($"Re-get {host.Id}");
                     }
-                    await client.ReadDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, host.Id));
+                    await _client.ReadDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, host.Id));
                     break;
                 }
                 catch (DocumentClientException de)
@@ -138,7 +218,7 @@ namespace WestWorld
                             try
                             {
                                 await
-                                    client.CreateDocumentAsync(
+                                    _client.CreateDocumentAsync(
                                         UriFactory.CreateDocumentCollectionUri(databaseName, collectionName), host);
                                 Console.WriteLine($"Create {host.Name} (Id: {host.Id})");
                                 return;

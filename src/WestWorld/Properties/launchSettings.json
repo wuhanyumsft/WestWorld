@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "WestWorld": {
+      "commandName": "Project",
+      "commandLineArgs": "HostList Pressure"
+    }
+  }
+}
