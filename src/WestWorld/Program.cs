@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using RandomNameGeneratorLibrary;
 
@@ -16,9 +18,15 @@ namespace WestWorld
         private static IDocumentClient _client;
         private const int HostNumber = 100000;
         private const int ConcurrentCount = 100;
+        static public IConfigurationRoot Configuration { get; set; }
 
         public static void Main(string[] args)
         {
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json");
+            Configuration = builder.Build();
+
             const string endPoint = "https://westworld.documents.azure.com:443/";
             const string key = "1YTKAuKuZOx4I8tkdJGmLNBRnr3kBu3PYQuqQw24HsZnu5rbUnJL33LKW39NNAMGOCLwWrVtR9tVCb44w4slDw==";
             _client = new DocumentClient(new Uri(endPoint), key);
@@ -56,25 +64,50 @@ namespace WestWorld
 
         private static void PressureTest(string databaseName, string collectionName)
         {
-            const int concurrentNumStart = 10;
-            const int concurrentNumEnd = 100;
-            const int concurrentStep = 10;
-            const int stepDurationMinute = 5;
+            int concurrentNumStart = int.Parse(Configuration["perf_concurrent_start"]);
+            int concurrentNumEnd = int.Parse(Configuration["perf_concurrent_end"]);
+            int concurrentStep = int.Parse(Configuration["perf_concurrent_step"]);
+            var numberOfDocumentsToRead = int.Parse(Configuration["perf_documents_to_read"]);
 
             for (int i = concurrentNumStart; i <= concurrentNumEnd; i += concurrentStep)
             {
-                var autoEvent = new AutoResetEvent(false);
                 var concurrentNum = i;
-                using (new Timer(state =>
+                Task[] tasks = new Task[concurrentNum];
+                Stopwatch sw = new Stopwatch();
+                sw.Start();
+                for (int j = 0; j < concurrentNum; j++)
                 {
-                    Console.WriteLine($"Hello {concurrentNum} {System.DateTime.Now}");
-                }, autoEvent, 0, Timeout.Infinite))
-                {
-                    autoEvent.WaitOne(stepDurationMinute * 60 * 1000);
+                    tasks[j] = GetRandomHostFromHostList(databaseName, collectionName, numberOfDocumentsToRead);
                 }
+                Task.WaitAll(tasks);
+                sw.Stop();
+                var tps = (double)numberOfDocumentsToRead * concurrentNum / sw.ElapsedMilliseconds * 1000;
+                Console.WriteLine($"{concurrentNum}, {tps:##.000}");
             }
 
             Console.ReadKey();
+        }
+
+        private static async Task<Tuple<int, int>> GetRandomHostFromHostList(string databaseName, string collectionName, int numberOfDocumentsToRead)
+        {
+            Random seed = new Random();
+            int sRequest = 0;
+            int fRequest = 0;
+
+            for (int i = 0; i < numberOfDocumentsToRead; i++)
+            {
+                int hostId = seed.Next(0, HostNumber);
+                Document doc =  await _client.ReadDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, hostId.ToString()));
+                if (doc != null)
+                {
+                    sRequest++;
+                }
+                else
+                {
+                    fRequest++;
+                }
+            }
+            return Tuple.Create(sRequest, fRequest);
         }
 
         private static void GetRandomHostFromHostList(string databaseName, string collectionName)

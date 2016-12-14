@@ -9,6 +9,9 @@
 
   "dependencies": {
     "Microsoft.Azure.DocumentDB.Core": "0.1.0-preview",
+    "Microsoft.Extensions.Configuration": "1.1.0",
+    "Microsoft.Extensions.Configuration.FileExtensions": "1.1.0",
+    "Microsoft.Extensions.Configuration.Json": "1.1.0",
     "Microsoft.NETCore.App": "1.1.0",
     "RandomNameGeneratorLibrary": "1.2.2"
   },
