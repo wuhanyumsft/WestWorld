@@ -27,9 +27,14 @@ namespace WestWorld
                 .AddJsonFile("appsettings.json");
             Configuration = builder.Build();
 
-            const string endPoint = "https://westworld.documents.azure.com:443/";
-            const string key = "1YTKAuKuZOx4I8tkdJGmLNBRnr3kBu3PYQuqQw24HsZnu5rbUnJL33LKW39NNAMGOCLwWrVtR9tVCb44w4slDw==";
-            _client = new DocumentClient(new Uri(endPoint), key);
+            string endPoint = Configuration["db_endpoint"];
+            string key = Configuration["db_key"];
+
+            ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+            //Setting read region selection preference
+            connectionPolicy.PreferredLocations.Add(LocationNames.WestUS); // first preference
+            connectionPolicy.PreferredLocations.Add(LocationNames.EastUS); // second preference
+            _client = new DocumentClient(new Uri(endPoint), key, connectionPolicy);
 
             const string databaseName = "WestWorld";
             string collectionName = "HostList";
@@ -48,18 +53,27 @@ namespace WestWorld
             }
 
             if (string.IsNullOrEmpty(operationName) ||
-                string.Equals("Create", operationName, StringComparison.CurrentCultureIgnoreCase))
+                string.Equals("Create", operationName, StringComparison.OrdinalIgnoreCase))
             {
                 CreateHostList(databaseName, collectionName);
             }
-            else if (string.Equals("Ping", operationName, StringComparison.CurrentCultureIgnoreCase))
+            else if (string.Equals("Ping", operationName, StringComparison.OrdinalIgnoreCase))
             {
                 GetRandomHostFromHostList(databaseName, collectionName);
             }
-            else if (string.Equals("Pressure", operationName, StringComparison.CurrentCultureIgnoreCase))
+            else if (string.Equals("Pressure", operationName, StringComparison.OrdinalIgnoreCase))
             {
                 PressureTest(databaseName, collectionName);
             }
+            else if (string.Equals("Disaster", operationName, StringComparison.OrdinalIgnoreCase))
+            {
+                
+            }
+        }
+
+        private static void DisasterTest(string databaseName, string collectionName)
+        {
+            
         }
 
         private static void PressureTest(string databaseName, string collectionName)
@@ -129,7 +143,7 @@ namespace WestWorld
             }
         }
 
-        private async static Task<long> GetTimeElapsedOfGetHost(string databaseName, string collectionName, string hostId)
+        private static async Task<long> GetTimeElapsedOfGetHost(string databaseName, string collectionName, string hostId)
         {
             Stopwatch sw = new Stopwatch();
             sw.Start();
@@ -250,10 +264,13 @@ namespace WestWorld
                         {
                             try
                             {
+                                Stopwatch sw = new Stopwatch();
+                                sw.Start();
                                 await
                                     _client.CreateDocumentAsync(
                                         UriFactory.CreateDocumentCollectionUri(databaseName, collectionName), host);
-                                Console.WriteLine($"Create {host.Name} (Id: {host.Id})");
+                                sw.Stop();
+                                Console.WriteLine($"Create {host.Name} (Id: {host.Id}), {sw.ElapsedMilliseconds}");
                                 return;
                             }
                             catch (DocumentClientException dce)

@@ -16,7 +16,8 @@
     <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <ItemGroup>
-    <DnxInvisibleContent Include="appsettings.json" />
+    <PublishFile Include="appsettings.json">
+    </PublishFile>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\DotNet\Microsoft.DotNet.targets" Condition="'$(VSToolsPath)' != ''" />
 </Project>
