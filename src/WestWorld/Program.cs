@@ -65,7 +65,7 @@ namespace WestWorld
             {
                 PressureTest(databaseName, collectionName);
             }
-            else if (string.Equals("Disaster", operationName, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals("MultiRegion", operationName, StringComparison.OrdinalIgnoreCase))
             {
                 
             }
@@ -231,7 +231,7 @@ namespace WestWorld
                     await _client.CreateDocumentCollectionAsync(
                         UriFactory.CreateDatabaseUri(databaseName),
                         collectionInfo,
-                        new RequestOptions { OfferThroughput = 400 });
+                        new RequestOptions { OfferThroughput = 2000 });
 
                     WriteToConsoleAndPromptToContinue("Created {0}", collectionName);
                 }
@@ -270,7 +270,7 @@ namespace WestWorld
                                     _client.CreateDocumentAsync(
                                         UriFactory.CreateDocumentCollectionUri(databaseName, collectionName), host);
                                 sw.Stop();
-                                Console.WriteLine($"Create {host.Name} (Id: {host.Id}), {sw.ElapsedMilliseconds}");
+                                Console.WriteLine($"Create {host.Name} (Id: {host.Id}), {sw.ElapsedMilliseconds}, {DateTime.Now:h:mm:ss tt}");
                                 return;
                             }
                             catch (DocumentClientException dce)
