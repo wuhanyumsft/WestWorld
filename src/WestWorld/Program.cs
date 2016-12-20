@@ -65,15 +65,6 @@ namespace WestWorld
             {
                 PressureTest(databaseName, collectionName);
             }
-            else if (string.Equals("MultiRegion", operationName, StringComparison.OrdinalIgnoreCase))
-            {
-                
-            }
-        }
-
-        private static void DisasterTest(string databaseName, string collectionName)
-        {
-            
         }
 
         private static void PressureTest(string databaseName, string collectionName)
